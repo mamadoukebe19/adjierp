@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 
 const ReportForm: React.FC = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nom: '',
     prenom: '',
@@ -28,11 +29,40 @@ const ReportForm: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Rapport soumis:', formData);
-    // TODO: Implémenter l'envoi vers l'API
-    navigate('/reports');
+    setLoading(true);
+    
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
+        body: JSON.stringify({
+          reportDate: formData.date,
+          firstName: formData.nom,
+          lastName: formData.prenom,
+          pbaProduction: {
+            '9AR150': formData.pba9AR150,
+            '9AR300': formData.pba9AR300,
+            '9AR400': formData.pba9AR400
+          },
+          observations: formData.observations
+        })
+      });
+      
+      if (response.ok) {
+        navigate('/reports');
+      } else {
+        console.error('Erreur lors de la création du rapport');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -162,8 +192,9 @@ const ReportForm: React.FC = () => {
                 type="submit"
                 variant="contained"
                 startIcon={<SaveIcon />}
+                disabled={loading}
               >
-                Enregistrer
+                {loading ? 'Enregistrement...' : 'Enregistrer'}
               </Button>
             </Box>
           </Grid>

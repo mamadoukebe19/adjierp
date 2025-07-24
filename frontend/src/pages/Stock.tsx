@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -16,18 +16,40 @@ import {
 } from '@mui/material';
 
 const Stock: React.FC = () => {
-  const stockPBA = [
-    { type: '9AR150', initial: 100, production: 45, sorties: 30, actuel: 115, seuil: 50 },
-    { type: '9AR300', initial: 80, production: 38, sorties: 25, actuel: 93, seuil: 40 },
-    { type: '9AR400', initial: 120, production: 52, sorties: 40, actuel: 132, seuil: 60 },
-    { type: '9AR650', initial: 60, production: 20, sorties: 15, actuel: 65, seuil: 30 },
-  ];
+  const [stockPBA, setStockPBA] = useState([]);
+  const [stockMateriaux, setStockMateriaux] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const stockMateriaux = [
-    { materiau: 'Fer 6-20', unite: 'kg', stock: 2500, seuil: 1000 },
-    { materiau: 'Étriers', unite: 'unités', stock: 850, seuil: 500 },
-    { materiau: 'Ciment', unite: 'sacs', stock: 120, seuil: 200 },
-  ];
+  useEffect(() => {
+    fetchStock();
+  }, []);
+
+  const fetchStock = async () => {
+    try {
+      const [pbaResponse, materialResponse] = await Promise.all([
+        fetch('/api/stock/pba', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        }),
+        fetch('/api/stock/materials', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        })
+      ]);
+      
+      if (pbaResponse.ok) {
+        const pbaData = await pbaResponse.json();
+        setStockPBA(pbaData.data || []);
+      }
+      
+      if (materialResponse.ok) {
+        const materialData = await materialResponse.json();
+        setStockMateriaux(materialData.data || []);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des stocks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStockStatus = (actuel: number, seuil: number) => {
     if (actuel <= seuil) return { label: 'Critique', color: 'error' as const };
@@ -61,17 +83,25 @@ const Stock: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {stockPBA.map((item) => {
-                      const status = getStockStatus(item.actuel, item.seuil);
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">Chargement...</TableCell>
+                      </TableRow>
+                    ) : stockPBA.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">Aucun stock PBA trouvé</TableCell>
+                      </TableRow>
+                    ) : stockPBA.map((item: any) => {
+                      const status = getStockStatus(item.currentStock || 0, 50);
                       return (
-                        <TableRow key={item.type}>
+                        <TableRow key={item.code || item.id}>
                           <TableCell component="th" scope="row">
-                            <strong>{item.type}</strong>
+                            <strong>{item.code}</strong>
                           </TableCell>
-                          <TableCell align="right">{item.initial}</TableCell>
-                          <TableCell align="right" style={{ color: 'green' }}>+{item.production}</TableCell>
-                          <TableCell align="right" style={{ color: 'red' }}>-{item.sorties}</TableCell>
-                          <TableCell align="right"><strong>{item.actuel}</strong></TableCell>
+                          <TableCell align="right">{item.initialStock || 0}</TableCell>
+                          <TableCell align="right" style={{ color: 'green' }}>+{item.totalProduced || 0}</TableCell>
+                          <TableCell align="right" style={{ color: 'red' }}>-{item.totalDelivered || 0}</TableCell>
+                          <TableCell align="right"><strong>{item.currentStock || 0}</strong></TableCell>
                           <TableCell align="center">
                             <Chip label={status.label} color={status.color} size="small" />
                           </TableCell>
@@ -103,16 +133,24 @@ const Stock: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {stockMateriaux.map((item) => {
-                      const status = getStockStatus(item.stock, item.seuil);
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">Chargement...</TableCell>
+                      </TableRow>
+                    ) : stockMateriaux.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">Aucun stock matériau trouvé</TableCell>
+                      </TableRow>
+                    ) : stockMateriaux.map((item: any) => {
+                      const status = getStockStatus(item.currentStock || 0, 100);
                       return (
-                        <TableRow key={item.materiau}>
+                        <TableRow key={item.name || item.id}>
                           <TableCell component="th" scope="row">
-                            <strong>{item.materiau}</strong>
+                            <strong>{item.name}</strong>
                           </TableCell>
-                          <TableCell>{item.unite}</TableCell>
-                          <TableCell align="right"><strong>{item.stock}</strong></TableCell>
-                          <TableCell align="right">{item.seuil}</TableCell>
+                          <TableCell>{item.unit}</TableCell>
+                          <TableCell align="right"><strong>{item.currentStock || 0}</strong></TableCell>
+                          <TableCell align="right">{100}</TableCell>
                           <TableCell align="center">
                             <Chip label={status.label} color={status.color} size="small" />
                           </TableCell>

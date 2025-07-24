@@ -92,85 +92,29 @@ router.get('/', authenticateToken, async (req, res) => {
       JOIN users u ON dr.user_id = u.id
       ${whereClause}
       ORDER BY dr.report_date DESC, dr.created_at DESC
-      LIMIT ? OFFSET ?
     `;
 
-    const countResult = await executeQuery(countQuery, params);
-    const reports = await executeQuery(query, [...params, limit, offset]);
+    const reports = await executeQuery(query, params);
 
-    // Récupération des détails pour chaque rapport
+    // Ajout du total PBA pour chaque rapport
     const reportsWithDetails = await Promise.all(
       reports.map(async (report) => {
-        // Production PBA
-        const pbaProduction = await executeQuery(`
-          SELECT 
-            rpba.id,
-            rpba.quantity,
-            p.code,
-            p.name,
-            p.category
-          FROM report_pba_production rpba
-          JOIN pba_products p ON rpba.pba_product_id = p.id
-          WHERE rpba.report_id = ?
-        `, [report.id]);
-
-        // Utilisation de matériaux
-        const materialUsage = await executeQuery(`
-          SELECT 
-            rmu.id,
-            rmu.quantity,
-            rmu.unit,
-            rmu.additional_info,
-            m.code,
-            m.name,
-            m.category
-          FROM report_material_usage rmu
-          JOIN materials m ON rmu.material_id = m.id
-          WHERE rmu.report_id = ?
-        `, [report.id]);
-
-        // Production d'armatures
-        const armatureProduction = await executeQuery(`
-          SELECT 
-            rap.id,
-            rap.quantity,
-            a.code,
-            a.name
-          FROM report_armature_production rap
-          JOIN armatures a ON rap.armature_id = a.id
-          WHERE rap.report_id = ?
-        `, [report.id]);
-
-        // Personnel
-        const personnel = await executeQuery(`
-          SELECT 
-            position,
-            quantity
-          FROM report_personnel
+        const pbaTotal = await executeQuery(`
+          SELECT COALESCE(SUM(quantity), 0) as total
+          FROM report_pba_production
           WHERE report_id = ?
         `, [report.id]);
 
         return {
           ...report,
-          pbaProduction,
-          materialUsage,
-          armatureProduction,
-          personnel
+          pbaTotal: pbaTotal[0].total
         };
       })
     );
 
     res.json({
       success: true,
-      data: {
-        reports: reportsWithDetails,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(countResult[0].total / limit),
-          totalItems: countResult[0].total,
-          itemsPerPage: limit
-        }
-      }
+      data: reportsWithDetails || []
     });
 
   } catch (error) {
@@ -288,52 +232,18 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/reports - Créer un nouveau rapport
-router.post('/', [authenticateToken, ...validateReport], async (req, res) => {
+// POST /api/reports - Créer un nouveau rapport (version simplifiée)
+router.post('/', authenticateToken, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Données invalides',
-        errors: errors.array()
-      });
-    }
-
     const {
       reportDate,
       firstName,
       lastName,
-      pbaProduction = [],
-      materialUsage = [],
-      armatureProduction = [],
-      personnel = [],
+      pbaProduction = {},
       observations = ''
     } = req.body;
 
-    // Vérification qu'un rapport n'existe pas déjà pour cette date et cet utilisateur
-    const existingReport = await executeQuery(
-      'SELECT id FROM daily_reports WHERE user_id = ? AND report_date = ?',
-      [req.user.id, reportDate]
-    );
-
-    if (existingReport.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: 'Un rapport existe déjà pour cette date'
-      });
-    }
-
-    // Préparation des requêtes de transaction
-    const queries = [];
-
     // Création du rapport principal
-    queries.push({
-      query: 'INSERT INTO daily_reports (user_id, report_date, first_name, last_name, observations) VALUES (?, ?, ?, ?, ?)',
-      params: [req.user.id, reportDate, firstName, lastName, observations]
-    });
-
-    // Exécution de la transaction pour obtenir l'ID du rapport
     const reportResult = await executeQuery(
       'INSERT INTO daily_reports (user_id, report_date, first_name, last_name, observations) VALUES (?, ?, ?, ?, ?)',
       [req.user.id, reportDate, firstName, lastName, observations]
@@ -341,52 +251,17 @@ router.post('/', [authenticateToken, ...validateReport], async (req, res) => {
 
     const reportId = reportResult.insertId;
 
-    // Préparation des requêtes pour les détails
-    const detailQueries = [];
-
-    // Production PBA
-    for (const production of pbaProduction) {
-      if (production.quantity > 0) {
-        detailQueries.push({
-          query: 'INSERT INTO report_pba_production (report_id, pba_product_id, quantity) VALUES (?, ?, ?)',
-          params: [reportId, production.productId, production.quantity]
-        });
+    // Ajout de la production PBA simple
+    const products = await executeQuery('SELECT id, code FROM pba_products WHERE is_active = TRUE');
+    
+    for (const product of products) {
+      const quantity = pbaProduction[product.code] || 0;
+      if (quantity > 0) {
+        await executeQuery(
+          'INSERT INTO report_pba_production (report_id, pba_product_id, quantity) VALUES (?, ?, ?)',
+          [reportId, product.id, quantity]
+        );
       }
-    }
-
-    // Utilisation de matériaux
-    for (const usage of materialUsage) {
-      if (usage.quantity > 0) {
-        detailQueries.push({
-          query: 'INSERT INTO report_material_usage (report_id, material_id, quantity, unit, additional_info) VALUES (?, ?, ?, ?, ?)',
-          params: [reportId, usage.materialId, usage.quantity, usage.unit, usage.additionalInfo || null]
-        });
-      }
-    }
-
-    // Production d'armatures
-    for (const production of armatureProduction) {
-      if (production.quantity > 0) {
-        detailQueries.push({
-          query: 'INSERT INTO report_armature_production (report_id, armature_id, quantity) VALUES (?, ?, ?)',
-          params: [reportId, production.armatureId, production.quantity]
-        });
-      }
-    }
-
-    // Personnel
-    for (const person of personnel) {
-      if (person.quantity > 0) {
-        detailQueries.push({
-          query: 'INSERT INTO report_personnel (report_id, position, quantity) VALUES (?, ?, ?)',
-          params: [reportId, person.position, person.quantity]
-        });
-      }
-    }
-
-    // Exécution des requêtes de détail
-    if (detailQueries.length > 0) {
-      await executeTransaction(detailQueries);
     }
 
     res.status(201).json({

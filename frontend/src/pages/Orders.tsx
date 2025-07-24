@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -13,42 +13,33 @@ import {
   Chip,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 const Orders: React.FC = () => {
-  const mockOrders = [
-    {
-      id: 'CMD-001',
-      client: 'Entreprise BTP Alger',
-      date: '2024-01-15',
-      montant: 125000,
-      statut: 'En cours',
-      items: '50x 9AR150, 30x 9AR300',
-    },
-    {
-      id: 'CMD-002',
-      client: 'Construction Moderne',
-      date: '2024-01-12',
-      montant: 89500,
-      statut: 'Validée',
-      items: '40x 9AR400, 20x 12AR400',
-    },
-    {
-      id: 'CMD-003',
-      client: 'Bâtiment Plus',
-      date: '2024-01-10',
-      montant: 156000,
-      statut: 'Livrée',
-      items: '60x 9AR650, 25x 12AR650',
-    },
-    {
-      id: 'CMD-004',
-      client: 'Entreprise BTP Alger',
-      date: '2024-01-08',
-      montant: 78000,
-      statut: 'En attente',
-      items: '35x 9AR300, 15x 9AR400',
-    },
-  ];
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const response = await fetch('/api/orders', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setOrders(data.data || []);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des commandes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -69,6 +60,7 @@ const Orders: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
+          onClick={() => navigate('/orders/new')}
         >
           Nouvelle Commande
         </Button>
@@ -88,25 +80,33 @@ const Orders: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {mockOrders.map((order) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">Chargement...</TableCell>
+              </TableRow>
+            ) : orders.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">Aucune commande trouvée</TableCell>
+              </TableRow>
+            ) : orders.map((order: any) => (
               <TableRow key={order.id}>
                 <TableCell>
-                  <strong>{order.id}</strong>
+                  <strong>{order.orderNumber || order.order_number}</strong>
                 </TableCell>
-                <TableCell>{order.client}</TableCell>
-                <TableCell>{order.date}</TableCell>
+                <TableCell>{order.client_name || 'Client inconnu'}</TableCell>
+                <TableCell>{new Date(order.order_date).toLocaleDateString('fr-FR')}</TableCell>
                 <TableCell>
                   <Typography variant="body2" color="textSecondary">
-                    {order.items}
+                    {order.itemsCount || 0} articles
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <strong>{order.montant.toLocaleString()} DA</strong>
+                  <strong>{parseFloat(order.total_amount || 0).toLocaleString()} DA</strong>
                 </TableCell>
                 <TableCell align="center">
                   <Chip
-                    label={order.statut}
-                    color={getStatusColor(order.statut) as any}
+                    label={order.status}
+                    color={getStatusColor(order.status) as any}
                     size="small"
                   />
                 </TableCell>

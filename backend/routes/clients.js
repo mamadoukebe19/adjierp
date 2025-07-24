@@ -72,22 +72,11 @@ router.get('/', authenticateToken, async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    const [countResult, clients] = await Promise.all([
-      executeQuery(countQuery, params),
-      executeQuery(query, [...params, limit, offset])
-    ]);
+    const clients = await executeQuery(query.replace('LIMIT ? OFFSET ?', ''), params);
 
     res.json({
       success: true,
-      data: {
-        clients,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(countResult[0].total / limit),
-          totalItems: countResult[0].total,
-          itemsPerPage: limit
-        }
-      }
+      data: clients
     });
 
   } catch (error) {

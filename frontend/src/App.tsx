@@ -10,9 +10,11 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import ReportForm from './pages/ReportForm';
+import ReportDetail from './pages/ReportDetail';
 import Stock from './pages/Stock';
 import Clients from './pages/Clients';
 import Orders from './pages/Orders';
+import OrderForm from './pages/OrderForm';
 
 // Components
 import Layout from './components/Layout';
@@ -67,6 +69,13 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/reports/:id" element={
+              <ProtectedRoute>
+                <Layout>
+                  <ReportDetail />
+                </Layout>
+              </ProtectedRoute>
+            } />
             <Route path="/stock" element={
               <ProtectedRoute>
                 <Layout>
@@ -85,6 +94,13 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Orders />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/new" element={
+              <ProtectedRoute>
+                <Layout>
+                  <OrderForm />
                 </Layout>
               </ProtectedRoute>
             } />

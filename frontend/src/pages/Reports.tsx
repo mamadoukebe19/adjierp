@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -16,12 +16,31 @@ import { useNavigate } from 'react-router-dom';
 
 const Reports: React.FC = () => {
   const navigate = useNavigate();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const mockReports = [
-    { id: 1, date: '2024-01-15', author: 'Jean Dupont', pbaTotal: 45, status: 'Validé' },
-    { id: 2, date: '2024-01-14', author: 'Marie Martin', pbaTotal: 38, status: 'En attente' },
-    { id: 3, date: '2024-01-13', author: 'Pierre Durand', pbaTotal: 52, status: 'Validé' },
-  ];
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      const response = await fetch('/api/reports', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setReports(data.data || []);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des rapports:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Box>
@@ -50,17 +69,27 @@ const Reports: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {mockReports.map((report) => (
-              <TableRow key={report.id}>
-                <TableCell>{report.date}</TableCell>
-                <TableCell>{report.author}</TableCell>
-                <TableCell>{report.pbaTotal}</TableCell>
-                <TableCell>{report.status}</TableCell>
-                <TableCell>
-                  <Button size="small">Voir</Button>
-                </TableCell>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} align="center">Chargement...</TableCell>
               </TableRow>
-            ))}
+            ) : reports.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} align="center">Aucun rapport trouvé</TableCell>
+              </TableRow>
+            ) : (
+              reports.map((report: any) => (
+                <TableRow key={report.id}>
+                  <TableCell>{new Date(report.report_date).toLocaleDateString('fr-FR')}</TableCell>
+                  <TableCell>{`${report.first_name} ${report.last_name}`}</TableCell>
+                  <TableCell>{report.pbaTotal}</TableCell>
+                  <TableCell>{report.status}</TableCell>
+                  <TableCell>
+                    <Button size="small" onClick={() => navigate(`/reports/${report.id}`)}>Voir</Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>

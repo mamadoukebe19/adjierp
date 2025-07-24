@@ -8,43 +8,14 @@ const router = express.Router();
 // GET /api/stock/pba - Récupérer les stocks PBA
 router.get('/pba', authenticateToken, async (req, res) => {
   try {
-    const category = req.query.category;
-    const lowStock = req.query.lowStock === 'true';
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-
-    let whereConditions = [];
-    let params = [];
-
-    if (category) {
-      whereConditions.push('p.category = ?');
-      params.push(category);
-    }
-
-    if (lowStock) {
-      whereConditions.push('s.current_stock < 10'); // Seuil d'alerte configurable
-    }
-
-    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-
-    // Requête pour le total
-    const countQuery = `
-      SELECT COUNT(*) as total 
-      FROM pba_stock s 
-      JOIN pba_products p ON s.pba_product_id = p.id 
-      ${whereClause}
-    `;
-
-    // Requête principale
     const query = `
       SELECT 
         s.id,
         s.pba_product_id,
-        s.initial_stock,
-        s.current_stock,
-        s.total_produced,
-        s.total_delivered,
+        s.initial_stock as initialStock,
+        s.current_stock as currentStock,
+        s.total_produced as totalProduced,
+        s.total_delivered as totalDelivered,
         s.last_updated,
         p.code,
         p.name,
@@ -52,27 +23,14 @@ router.get('/pba', authenticateToken, async (req, res) => {
         p.unit_price
       FROM pba_stock s
       JOIN pba_products p ON s.pba_product_id = p.id
-      ${whereClause}
       ORDER BY p.code
-      LIMIT ? OFFSET ?
     `;
 
-    const [countResult, stocks] = await Promise.all([
-      executeQuery(countQuery, params),
-      executeQuery(query, [...params, limit, offset])
-    ]);
+    const stocks = await executeQuery(query);
 
     res.json({
       success: true,
-      data: {
-        stocks,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(countResult[0].total / limit),
-          totalItems: countResult[0].total,
-          itemsPerPage: limit
-        }
-      }
+      data: stocks
     });
 
   } catch (error) {
@@ -145,35 +103,11 @@ router.get('/armatures', authenticateToken, async (req, res) => {
 // GET /api/stock/materials - Récupérer les stocks de matériaux
 router.get('/materials', authenticateToken, async (req, res) => {
   try {
-    const category = req.query.category;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-
-    let whereConditions = [];
-    let params = [];
-
-    if (category) {
-      whereConditions.push('m.category = ?');
-      params.push(category);
-    }
-
-    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-
-    // Requête pour le total
-    const countQuery = `
-      SELECT COUNT(*) as total 
-      FROM material_stock s 
-      JOIN materials m ON s.material_id = m.id 
-      ${whereClause}
-    `;
-
-    // Requête principale
     const query = `
       SELECT 
         s.id,
         s.material_id,
-        s.current_stock,
+        s.current_stock as currentStock,
         s.unit,
         s.last_updated,
         m.code,
@@ -182,27 +116,14 @@ router.get('/materials', authenticateToken, async (req, res) => {
         m.unit_price
       FROM material_stock s
       JOIN materials m ON s.material_id = m.id
-      ${whereClause}
       ORDER BY m.code
-      LIMIT ? OFFSET ?
     `;
 
-    const [countResult, stocks] = await Promise.all([
-      executeQuery(countQuery, params),
-      executeQuery(query, [...params, limit, offset])
-    ]);
+    const stocks = await executeQuery(query);
 
     res.json({
       success: true,
-      data: {
-        stocks,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(countResult[0].total / limit),
-          totalItems: countResult[0].total,
-          itemsPerPage: limit
-        }
-      }
+      data: stocks
     });
 
   } catch (error) {
