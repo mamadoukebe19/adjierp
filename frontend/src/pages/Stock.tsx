@@ -12,13 +12,26 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
 } from '@mui/material';
 
 const Stock: React.FC = () => {
   const [stockPBA, setStockPBA] = useState([]);
   const [stockMateriaux, setStockMateriaux] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAdjustment, setShowAdjustment] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [adjustmentData, setAdjustmentData] = useState({
+    quantity: 0,
+    adjustmentType: 'add',
+    notes: ''
+  });
 
   useEffect(() => {
     fetchStock();
@@ -51,6 +64,37 @@ const Stock: React.FC = () => {
     }
   };
 
+  const handleAdjustStock = (product: any) => {
+    setSelectedProduct(product);
+    setAdjustmentData({ quantity: 0, adjustmentType: 'add', notes: '' });
+    setShowAdjustment(true);
+  };
+
+  const submitAdjustment = async () => {
+    try {
+      const response = await fetch('/api/stock/pba/manual-adjustment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
+        body: JSON.stringify({
+          productId: (selectedProduct as any)?.pba_product_id,
+          quantity: adjustmentData.quantity,
+          adjustmentType: adjustmentData.adjustmentType,
+          notes: adjustmentData.notes
+        })
+      });
+      
+      if (response.ok) {
+        setShowAdjustment(false);
+        fetchStock();
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  };
+
   const getStockStatus = (actuel: number, seuil: number) => {
     if (actuel <= seuil) return { label: 'Critique', color: 'error' as const };
     if (actuel <= seuil * 1.5) return { label: 'Faible', color: 'warning' as const };
@@ -80,16 +124,17 @@ const Stock: React.FC = () => {
                       <TableCell align="right">Sorties</TableCell>
                       <TableCell align="right">Stock Actuel</TableCell>
                       <TableCell align="center">Statut</TableCell>
+                      <TableCell align="center">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">Chargement...</TableCell>
+                        <TableCell colSpan={7} align="center">Chargement...</TableCell>
                       </TableRow>
                     ) : stockPBA.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">Aucun stock PBA trouvé</TableCell>
+                        <TableCell colSpan={7} align="center">Aucun stock PBA trouvé</TableCell>
                       </TableRow>
                     ) : stockPBA.map((item: any) => {
                       const status = getStockStatus(item.currentStock || 0, 50);
@@ -104,6 +149,9 @@ const Stock: React.FC = () => {
                           <TableCell align="right"><strong>{item.currentStock || 0}</strong></TableCell>
                           <TableCell align="center">
                             <Chip label={status.label} color={status.color} size="small" />
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button size="small" onClick={() => handleAdjustStock(item)}>Ajuster</Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -164,6 +212,50 @@ const Stock: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+      
+      <Dialog open={showAdjustment} onClose={() => setShowAdjustment(false)}>
+        <DialogTitle>Ajuster Stock - {(selectedProduct as any)?.code}</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                select
+                fullWidth
+                label="Type d'ajustement"
+                value={adjustmentData.adjustmentType}
+                onChange={(e) => setAdjustmentData({...adjustmentData, adjustmentType: e.target.value})}
+              >
+                <MenuItem value="add">Entrée (+)</MenuItem>
+                <MenuItem value="remove">Sortie (-)</MenuItem>
+                <MenuItem value="set">Définir stock</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Quantité"
+                value={adjustmentData.quantity}
+                onChange={(e) => setAdjustmentData({...adjustmentData, quantity: parseInt(e.target.value) || 0})}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                label="Notes"
+                value={adjustmentData.notes}
+                onChange={(e) => setAdjustmentData({...adjustmentData, notes: e.target.value})}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAdjustment(false)}>Annuler</Button>
+          <Button onClick={submitAdjustment} variant="contained">Ajuster</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -15,6 +15,7 @@ import Stock from './pages/Stock';
 import Clients from './pages/Clients';
 import Orders from './pages/Orders';
 import OrderForm from './pages/OrderForm';
+import OrderDetail from './pages/OrderDetail';
 
 // Components
 import Layout from './components/Layout';
@@ -101,6 +102,13 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <OrderForm />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/:id" element={
+              <ProtectedRoute>
+                <Layout>
+                  <OrderDetail />
                 </Layout>
               </ProtectedRoute>
             } />

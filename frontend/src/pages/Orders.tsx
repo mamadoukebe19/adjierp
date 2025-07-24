@@ -111,7 +111,7 @@ const Orders: React.FC = () => {
                   />
                 </TableCell>
                 <TableCell align="center">
-                  <Button size="small" variant="outlined">
+                  <Button size="small" variant="outlined" onClick={() => navigate(`/orders/${order.id}`)}>
                     Détails
                   </Button>
                 </TableCell>
