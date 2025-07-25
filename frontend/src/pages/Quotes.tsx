@@ -22,18 +22,19 @@ import { Add as AddIcon } from '@mui/icons-material';
 
 const Quotes: React.FC = () => {
   const [quotes, setQuotes] = useState([]);
-  const [orders, setOrders] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState('');
+  const [selectedClient, setSelectedClient] = useState('');
   const [quoteData, setQuoteData] = useState({
     validityDays: 30,
+    totalAmount: 0,
     notes: ''
   });
 
   useEffect(() => {
     fetchQuotes();
-    fetchConfirmedOrders();
+    fetchActiveClients();
   }, []);
 
   const fetchQuotes = async () => {
@@ -53,38 +54,41 @@ const Quotes: React.FC = () => {
     }
   };
 
-  const fetchConfirmedOrders = async () => {
+  const fetchActiveClients = async () => {
     try {
-      const response = await fetch('/api/orders?status=confirmed', {
+      const response = await fetch('/api/clients?status=active', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       
       if (response.ok) {
         const data = await response.json();
-        setOrders(data.data || []);
+        setClients(data.data || []);
       }
     } catch (error) {
-      console.error('Erreur lors du chargement des commandes:', error);
+      console.error('Erreur lors du chargement des clients:', error);
     }
   };
 
   const createQuote = async () => {
-    if (!selectedOrder) return;
+    if (!selectedClient) return;
     
     try {
-      const response = await fetch(`/api/orders/${selectedOrder}/quote`, {
+      const response = await fetch('/api/quotes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
-        body: JSON.stringify(quoteData)
+        body: JSON.stringify({
+          clientId: selectedClient,
+          ...quoteData
+        })
       });
       
       if (response.ok) {
         setShowCreateDialog(false);
-        setSelectedOrder('');
-        setQuoteData({ validityDays: 30, notes: '' });
+        setSelectedClient('');
+        setQuoteData({ validityDays: 30, totalAmount: 0, notes: '' });
         fetchQuotes();
       }
     } catch (error) {
@@ -223,18 +227,28 @@ const Quotes: React.FC = () => {
               <TextField
                 fullWidth
                 select
-                label="Commande"
-                value={selectedOrder}
-                onChange={(e) => setSelectedOrder(e.target.value)}
+                label="Client"
+                value={selectedClient}
+                onChange={(e) => setSelectedClient(e.target.value)}
                 SelectProps={{ native: true }}
               >
-                <option value="">Sélectionner une commande</option>
-                {orders.map((order: any) => (
-                  <option key={order.id} value={order.id}>
-                    {order.order_number} - {order.client_name} ({parseFloat(order.total_amount).toLocaleString()} DA)
+                <option value="">Sélectionner un client</option>
+                {clients.map((client: any) => (
+                  <option key={client.id} value={client.id}>
+                    {client.company_name} - {client.contact_person}
                   </option>
                 ))}
               </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Montant (DA)"
+                value={quoteData.totalAmount}
+                onChange={(e) => setQuoteData({...quoteData, totalAmount: parseFloat(e.target.value) || 0})}
+                inputProps={{ min: 0, step: 0.01 }}
+              />
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -260,7 +274,7 @@ const Quotes: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowCreateDialog(false)}>Annuler</Button>
-          <Button onClick={createQuote} variant="contained" disabled={!selectedOrder}>
+          <Button onClick={createQuote} variant="contained" disabled={!selectedClient || quoteData.totalAmount <= 0}>
             Créer le Devis
           </Button>
         </DialogActions>

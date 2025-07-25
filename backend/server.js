@@ -20,6 +20,9 @@ const dashboardRoutes = require('./routes/dashboard');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Configuration trust proxy pour Docker
+app.set('trust proxy', 1);
+
 // Middleware de sécurité
 app.use(helmet());
 app.use(compression());

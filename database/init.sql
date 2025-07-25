@@ -192,7 +192,8 @@ CREATE TABLE order_items (
 CREATE TABLE quotes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     quote_number VARCHAR(50) UNIQUE NOT NULL,
-    order_id INT NOT NULL,
+    client_id INT NOT NULL,
+    order_id INT NULL,
     quote_date DATE NOT NULL,
     validity_date DATE NOT NULL,
     status ENUM('pending', 'accepted', 'rejected', 'expired') DEFAULT 'pending',
@@ -200,6 +201,7 @@ CREATE TABLE quotes (
     notes TEXT,
     created_by INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id),
     FOREIGN KEY (order_id) REFERENCES orders(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -304,7 +306,7 @@ SELECT id, 0, unit FROM materials;
 
 -- Utilisateur administrateur par défaut (mot de passe: admin123)
 INSERT INTO users (username, email, password_hash, first_name, last_name, role) VALUES
-('admin', 'admin@docc.sn', '$2b$10$rOvHPx7VgCXvK/9JKJ9rw.XkU9lqrX8Q8rR5F5F5F5F5F5F5F5F5F', 'Admin', 'DOCC', 'admin');
+('admin', 'admin@docc.sn', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Admin', 'DOCC', 'admin');
 
 -- Indexes pour améliorer les performances
 CREATE INDEX idx_daily_reports_date ON daily_reports(report_date);

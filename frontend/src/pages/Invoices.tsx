@@ -65,7 +65,7 @@ const Invoices: React.FC = () => {
 
   const fetchPaidOrders = async () => {
     try {
-      const response = await fetch('/api/orders?status=paid', {
+      const response = await fetch('/api/orders', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       
@@ -82,13 +82,16 @@ const Invoices: React.FC = () => {
     if (!selectedOrder) return;
     
     try {
-      const response = await fetch(`/api/orders/${selectedOrder}/invoice`, {
+      const response = await fetch(`/api/invoices`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
-        body: JSON.stringify(invoiceData)
+        body: JSON.stringify({
+          orderId: selectedOrder,
+          ...invoiceData
+        })
       });
       
       if (response.ok) {
