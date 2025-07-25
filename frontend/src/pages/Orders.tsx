@@ -41,6 +41,28 @@ const Orders: React.FC = () => {
     }
   };
 
+  const downloadOrderPDF = async (orderId: number) => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `commande-${orderId}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Erreur lors du téléchargement:', error);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'En cours': return 'primary';
@@ -113,6 +135,9 @@ const Orders: React.FC = () => {
                 <TableCell align="center">
                   <Button size="small" variant="outlined" onClick={() => navigate(`/orders/${order.id}`)}>
                     Détails
+                  </Button>
+                  <Button size="small" onClick={() => downloadOrderPDF(order.id)} sx={{ ml: 1 }}>
+                    PDF
                   </Button>
                 </TableCell>
               </TableRow>

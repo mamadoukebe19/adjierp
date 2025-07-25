@@ -1,9 +1,10 @@
 
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { Toaster } from 'react-hot-toast';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 // Pages
 import Login from './pages/Login';
@@ -16,29 +17,31 @@ import Clients from './pages/Clients';
 import Orders from './pages/Orders';
 import OrderForm from './pages/OrderForm';
 import OrderDetail from './pages/OrderDetail';
+import Quotes from './pages/Quotes';
+import Invoices from './pages/Invoices';
 
 // Components
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
+const AppContent = () => {
+  const { isDarkMode } = useTheme();
+  
+  const theme = createTheme({
+    palette: {
+      mode: isDarkMode ? 'dark' : 'light',
+      primary: {
+        main: '#1976d2',
+      },
+      secondary: {
+        main: '#dc004e',
+      },
     },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
+  });
 
-const queryClient = new QueryClient();
-
-function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+    <MuiThemeProvider theme={theme}>
+      <CssBaseline />
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -112,9 +115,34 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/quotes" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Quotes />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/invoices" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Invoices />
+                </Layout>
+              </ProtectedRoute>
+            } />
           </Routes>
         </Router>
-        <Toaster position="top-right" />
+      <Toaster position="top-right" />
+    </MuiThemeProvider>
+  );
+};
+
+const queryClient = new QueryClient();
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AppContent />
       </ThemeProvider>
     </QueryClientProvider>
   );

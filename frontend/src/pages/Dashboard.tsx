@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -15,28 +15,69 @@ import {
 } from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
-  const stats = [
+  const [stats, setStats] = useState({
+    reports: 0,
+    stock: 0,
+    clients: 0,
+    orders: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [reportsRes, stockRes, clientsRes, ordersRes] = await Promise.all([
+        fetch('/api/reports', { headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` } }),
+        fetch('/api/stock/pba', { headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` } }),
+        fetch('/api/clients', { headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` } }),
+        fetch('/api/orders', { headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` } })
+      ]);
+
+      const [reports, stock, clients, orders] = await Promise.all([
+        reportsRes.ok ? reportsRes.json() : { data: [] },
+        stockRes.ok ? stockRes.json() : { data: [] },
+        clientsRes.ok ? clientsRes.json() : { data: [] },
+        ordersRes.ok ? ordersRes.json() : { data: [] }
+      ]);
+
+      setStats({
+        reports: reports.data?.length || 0,
+        stock: stock.data?.reduce((sum: number, item: any) => sum + (item.currentStock || 0), 0) || 0,
+        clients: clients.data?.filter((c: any) => c.is_active).length || 0,
+        orders: orders.data?.length || 0
+      });
+    } catch (error) {
+      console.error('Erreur dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const dashboardStats = [
     {
       title: 'Rapports Journaliers',
-      value: '12',
+      value: loading ? '...' : stats.reports.toString(),
       icon: <ReportsIcon sx={{ fontSize: 40, color: '#1976d2' }} />,
       color: '#e3f2fd',
     },
     {
-      title: 'Stock PBA',
-      value: '1,250',
+      title: 'Stock PBA Total',
+      value: loading ? '...' : stats.stock.toLocaleString(),
       icon: <StockIcon sx={{ fontSize: 40, color: '#388e3c' }} />,
       color: '#e8f5e8',
     },
     {
       title: 'Clients Actifs',
-      value: '45',
+      value: loading ? '...' : stats.clients.toString(),
       icon: <ClientsIcon sx={{ fontSize: 40, color: '#f57c00' }} />,
       color: '#fff3e0',
     },
     {
       title: 'Commandes',
-      value: '28',
+      value: loading ? '...' : stats.orders.toString(),
       icon: <OrdersIcon sx={{ fontSize: 40, color: '#7b1fa2' }} />,
       color: '#f3e5f5',
     },
@@ -49,7 +90,7 @@ const Dashboard: React.FC = () => {
       </Typography>
       
       <Grid container spacing={3}>
-        {stats.map((stat, index) => (
+        {dashboardStats.map((stat, index) => (
           <Grid item xs={12} sm={6} md={3} key={index}>
             <Card>
               <CardContent>

@@ -13,6 +13,8 @@ const reportRoutes = require('./routes/reports');
 const stockRoutes = require('./routes/stock');
 const clientRoutes = require('./routes/clients');
 const orderRoutes = require('./routes/orders');
+const quoteRoutes = require('./routes/quotes');
+const invoiceRoutes = require('./routes/invoices');
 const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
@@ -69,6 +71,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/quotes', quoteRoutes);
+app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Route de santé

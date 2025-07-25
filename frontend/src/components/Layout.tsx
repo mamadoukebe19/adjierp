@@ -21,9 +21,14 @@ import {
   Inventory as StockIcon,
   People as ClientsIcon,
   ShoppingCart as OrdersIcon,
+  Description as QuotesIcon,
+  Receipt as InvoicesIcon,
   Logout as LogoutIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 const drawerWidth = 240;
 
@@ -35,6 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -53,6 +59,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Stock', icon: <StockIcon />, path: '/stock' },
     { text: 'Clients', icon: <ClientsIcon />, path: '/clients' },
     { text: 'Commandes', icon: <OrdersIcon />, path: '/orders' },
+    { text: 'Devis', icon: <QuotesIcon />, path: '/quotes' },
+    { text: 'Factures', icon: <InvoicesIcon />, path: '/invoices' },
   ];
 
   const drawer = (
@@ -101,6 +109,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Gestion de Production
           </Typography>
+          <IconButton color="inherit" onClick={toggleTheme}>
+            {isDarkMode ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
           <Button color="inherit" onClick={handleLogout} startIcon={<LogoutIcon />}>
             Déconnexion
           </Button>

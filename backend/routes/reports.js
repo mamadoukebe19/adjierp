@@ -126,6 +126,155 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/reports/:id/pdf - Générer PDF du rapport
+router.get('/:id/pdf', authenticateToken, async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const reportId = parseInt(req.params.id);
+    
+    const report = await executeQuery(`
+      SELECT dr.*, u.username
+      FROM daily_reports dr
+      JOIN users u ON dr.user_id = u.id
+      WHERE dr.id = ?
+    `, [reportId]);
+    
+    if (report.length === 0) {
+      return res.status(404).json({ success: false, message: 'Rapport non trouvé' });
+    }
+
+    // Récupération des détails du rapport
+    const [pbaProduction, materialUsage, armatureProduction, personnel] = await Promise.all([
+      executeQuery(`
+        SELECT p.code, p.name, rpba.quantity
+        FROM report_pba_production rpba
+        JOIN pba_products p ON rpba.pba_product_id = p.id
+        WHERE rpba.report_id = ? AND rpba.quantity > 0
+        ORDER BY p.code
+      `, [reportId]),
+      executeQuery(`
+        SELECT m.code, m.name, rmu.quantity, rmu.unit
+        FROM report_material_usage rmu
+        JOIN materials m ON rmu.material_id = m.id
+        WHERE rmu.report_id = ? AND rmu.quantity > 0
+        ORDER BY m.code
+      `, [reportId]),
+      executeQuery(`
+        SELECT a.code, a.name, rap.quantity
+        FROM report_armature_production rap
+        JOIN armatures a ON rap.armature_id = a.id
+        WHERE rap.report_id = ? AND rap.quantity > 0
+        ORDER BY a.code
+      `, [reportId]),
+      executeQuery(`
+        SELECT position, quantity
+        FROM report_personnel
+        WHERE report_id = ? AND quantity > 0
+        ORDER BY position
+      `, [reportId])
+    ]);
+    
+    const doc = new PDFDocument();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="rapport-${reportId}.pdf"`);
+    
+    doc.pipe(res);
+    
+    let yPos = 50;
+    
+    // En-tête
+    doc.fontSize(20).text('RAPPORT JOURNALIER DOCC', 50, yPos);
+    yPos += 40;
+    
+    doc.fontSize(12);
+    doc.text(`Date: ${new Date(report[0].report_date).toLocaleDateString('fr-FR')}`, 50, yPos);
+    yPos += 20;
+    doc.text(`Auteur: ${report[0].first_name} ${report[0].last_name}`, 50, yPos);
+    yPos += 20;
+    doc.text(`Utilisateur: ${report[0].username}`, 50, yPos);
+    yPos += 20;
+    doc.text(`Statut: ${report[0].status}`, 50, yPos);
+    yPos += 30;
+    
+    // Production PBA
+    if (pbaProduction.length > 0) {
+      doc.fontSize(14).text('Production PBA:', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10);
+      
+      const totalPBA = pbaProduction.reduce((sum, item) => sum + item.quantity, 0);
+      pbaProduction.forEach(item => {
+        doc.text(`${item.code}: ${item.quantity}`, 70, yPos);
+        yPos += 15;
+      });
+      doc.text(`Total PBA: ${totalPBA}`, 70, yPos);
+      yPos += 25;
+    }
+    
+    // Matériaux utilisés
+    if (materialUsage.length > 0) {
+      doc.fontSize(14).text('Matériaux utilisés:', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10);
+      
+      materialUsage.forEach(item => {
+        doc.text(`${item.code}: ${item.quantity}${item.unit}`, 70, yPos);
+        yPos += 15;
+      });
+      yPos += 10;
+    }
+    
+    // Armatures façonnées
+    if (armatureProduction.length > 0) {
+      doc.fontSize(14).text('Armatures façonnées:', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10);
+      
+      const totalArmatures = armatureProduction.reduce((sum, item) => sum + item.quantity, 0);
+      armatureProduction.forEach(item => {
+        doc.text(`${item.code}: ${item.quantity}`, 70, yPos);
+        yPos += 15;
+      });
+      doc.text(`Total armatures: ${totalArmatures}`, 70, yPos);
+      yPos += 25;
+    }
+    
+    // Personnel mobilisé
+    if (personnel.length > 0) {
+      doc.fontSize(14).text('Personnel mobilisé:', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10);
+      
+      const totalPersonnel = personnel.reduce((sum, item) => sum + item.quantity, 0);
+      personnel.forEach(item => {
+        const position = item.position === 'macon' ? 'maçon' : 
+                        item.position === 'manoeuvre' ? 'manœuvre' : item.position;
+        doc.text(`${position}: ${item.quantity}`, 70, yPos);
+        yPos += 15;
+      });
+      doc.text(`Total personnel: ${totalPersonnel}`, 70, yPos);
+      yPos += 25;
+    }
+    
+    // Observations
+    if (report[0].observations) {
+      doc.fontSize(14).text('Observations:', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10).text(report[0].observations, 70, yPos, { width: 450 });
+      yPos += 40;
+    }
+    
+    // Pied de page
+    doc.fontSize(8).text(`Généré le ${new Date().toLocaleString('fr-FR')}`, 50, yPos + 20);
+    
+    doc.end();
+    
+  } catch (error) {
+    console.error('Erreur PDF rapport:', error);
+    res.status(500).json({ success: false, message: 'Erreur génération PDF' });
+  }
+});
+
 // GET /api/reports/:id - Récupérer un rapport spécifique
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -232,6 +381,85 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/reports/complete - Créer un rapport complet
+router.post('/complete', authenticateToken, async (req, res) => {
+  try {
+    const {
+      reportDate,
+      firstName,
+      lastName,
+      pbaProduction = [],
+      materialUsage = [],
+      armatureProduction = [],
+      personnel = [],
+      observations = ''
+    } = req.body;
+
+    // Création du rapport principal
+    const reportResult = await executeQuery(
+      'INSERT INTO daily_reports (user_id, report_date, first_name, last_name, observations) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, reportDate, firstName, lastName, observations]
+    );
+
+    const reportId = reportResult.insertId;
+    const queries = [];
+
+    // Ajout de la production PBA
+    for (const production of pbaProduction) {
+      queries.push({
+        query: 'INSERT INTO report_pba_production (report_id, pba_product_id, quantity) VALUES (?, ?, ?)',
+        params: [reportId, production.productId, production.quantity]
+      });
+    }
+
+    // Ajout des matériaux utilisés
+    for (const material of materialUsage) {
+      queries.push({
+        query: 'INSERT INTO report_material_usage (report_id, material_id, quantity, unit) VALUES (?, ?, ?, ?)',
+        params: [reportId, material.materialId, material.quantity, material.unit]
+      });
+    }
+
+    // Ajout des armatures façonnées
+    for (const armature of armatureProduction) {
+      queries.push({
+        query: 'INSERT INTO report_armature_production (report_id, armature_id, quantity) VALUES (?, ?, ?)',
+        params: [reportId, armature.armatureId, armature.quantity]
+      });
+    }
+
+    // Ajout du personnel mobilisé
+    for (const person of personnel) {
+      queries.push({
+        query: 'INSERT INTO report_personnel (report_id, position, quantity) VALUES (?, ?, ?)',
+        params: [reportId, person.position, person.quantity]
+      });
+    }
+
+    // Exécution de toutes les requêtes
+    if (queries.length > 0) {
+      await executeTransaction(queries);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Rapport complet créé avec succès',
+      data: {
+        reportId,
+        reportDate,
+        status: 'draft'
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur lors de la création du rapport complet:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur'
+    });
+  }
+});
+
 // POST /api/reports - Créer un nouveau rapport (version simplifiée)
 router.post('/', authenticateToken, async (req, res) => {
   try {
@@ -322,12 +550,11 @@ router.put('/:id/submit', authenticateToken, async (req, res) => {
       stockUpdateQueries.push({
         query: `
           UPDATE pba_stock 
-          SET current_stock = current_stock + ?, 
-              total_produced = total_produced + ?,
+          SET total_produced = total_produced + ?,
               last_updated = CURRENT_TIMESTAMP 
           WHERE pba_product_id = ?
         `,
-        params: [production.quantity, production.quantity, production.pba_product_id]
+        params: [production.quantity, production.pba_product_id]
       });
 
       // Enregistrement du mouvement de stock

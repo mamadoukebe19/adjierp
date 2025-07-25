@@ -13,7 +13,7 @@ router.get('/pba', authenticateToken, async (req, res) => {
         s.id,
         s.pba_product_id,
         s.initial_stock as initialStock,
-        s.current_stock as currentStock,
+        (s.initial_stock + s.total_produced - s.total_delivered) as currentStock,
         s.total_produced as totalProduced,
         s.total_delivered as totalDelivered,
         s.last_updated,
@@ -306,7 +306,7 @@ router.post('/pba/manual-adjustment', [
       {
         query: `
           UPDATE pba_stock 
-          SET current_stock = ?, last_updated = CURRENT_TIMESTAMP 
+          SET initial_stock = ?, last_updated = CURRENT_TIMESTAMP 
           WHERE pba_product_id = ?
         `,
         params: [newQuantity, productId]
@@ -365,23 +365,25 @@ router.post('/pba/delivery', [
     const { productId, quantity, orderId, notes = '' } = req.body;
 
     // Vérification du stock disponible
-    const currentStock = await executeQuery(
-      'SELECT current_stock FROM pba_stock WHERE pba_product_id = ?',
+    const stockInfo = await executeQuery(
+      'SELECT initial_stock, total_produced, total_delivered FROM pba_stock WHERE pba_product_id = ?',
       [productId]
     );
 
-    if (currentStock.length === 0) {
+    if (stockInfo.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Stock non trouvé'
       });
     }
 
-    if (currentStock[0].current_stock < quantity) {
+    const currentStock = stockInfo[0].initial_stock + stockInfo[0].total_produced - stockInfo[0].total_delivered;
+    
+    if (currentStock < quantity) {
       return res.status(400).json({
         success: false,
         message: 'Stock insuffisant',
-        available: currentStock[0].current_stock,
+        available: currentStock,
         requested: quantity
       });
     }
@@ -391,12 +393,11 @@ router.post('/pba/delivery', [
       {
         query: `
           UPDATE pba_stock 
-          SET current_stock = current_stock - ?, 
-              total_delivered = total_delivered + ?,
+          SET total_delivered = total_delivered + ?,
               last_updated = CURRENT_TIMESTAMP 
           WHERE pba_product_id = ?
         `,
-        params: [quantity, quantity, productId]
+        params: [quantity, productId]
       },
       {
         query: `
@@ -424,12 +425,102 @@ router.post('/pba/delivery', [
       data: {
         productId,
         deliveredQuantity: quantity,
-        remainingStock: currentStock[0].current_stock - quantity
+        remainingStock: currentStock - quantity
       }
     });
 
   } catch (error) {
     console.error('Erreur lors de l\'enregistrement de la livraison:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur'
+    });
+  }
+});
+
+// POST /api/stock/materials/manual-adjustment - Ajustement manuel du stock matériaux
+router.post('/materials/manual-adjustment', [
+  authenticateToken,
+  authorizeRoles('admin', 'manager'),
+  body('materialId').isInt().withMessage('ID matériau requis'),
+  body('quantity').isInt().withMessage('Quantité requise'),
+  body('adjustmentType').isIn(['add', 'remove', 'set']).withMessage('Type d\'ajustement invalide'),
+  body('notes').optional().isString().withMessage('Notes invalides')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données invalides',
+        errors: errors.array()
+      });
+    }
+
+    const { materialId, quantity, adjustmentType, notes = '' } = req.body;
+
+    const materials = await executeQuery(
+      'SELECT id FROM materials WHERE id = ?',
+      [materialId]
+    );
+
+    if (materials.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Matériau non trouvé'
+      });
+    }
+
+    const currentStock = await executeQuery(
+      'SELECT current_stock FROM material_stock WHERE material_id = ?',
+      [materialId]
+    );
+
+    if (currentStock.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Stock non trouvé'
+      });
+    }
+
+    const currentQuantity = currentStock[0].current_stock;
+    let newQuantity;
+
+    switch (adjustmentType) {
+      case 'add':
+        newQuantity = currentQuantity + quantity;
+        break;
+      case 'remove':
+        newQuantity = Math.max(0, currentQuantity - quantity);
+        break;
+      case 'set':
+        newQuantity = quantity;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Type d\'ajustement invalide'
+        });
+    }
+
+    await executeQuery(`
+      UPDATE material_stock 
+      SET current_stock = ?, last_updated = CURRENT_TIMESTAMP 
+      WHERE material_id = ?
+    `, [newQuantity, materialId]);
+
+    res.json({
+      success: true,
+      message: 'Stock matériau ajusté avec succès',
+      data: {
+        previousQuantity: currentQuantity,
+        newQuantity,
+        adjustment: newQuantity - currentQuantity
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur lors de l\'ajustement du stock matériau:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur interne du serveur'

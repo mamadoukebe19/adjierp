@@ -126,6 +126,63 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/orders/:id/pdf - Générer PDF de la commande
+router.get('/:id/pdf', authenticateToken, async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const orderId = parseInt(req.params.id);
+    
+    const order = await executeQuery(`
+      SELECT o.*, c.company_name, c.contact_person
+      FROM orders o
+      JOIN clients c ON o.client_id = c.id
+      WHERE o.id = ?
+    `, [orderId]);
+    
+    if (order.length === 0) {
+      return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    }
+    
+    const items = await executeQuery(`
+      SELECT oi.*, p.code, p.name
+      FROM order_items oi
+      JOIN pba_products p ON oi.pba_product_id = p.id
+      WHERE oi.order_id = ?
+    `, [orderId]);
+    
+    const doc = new PDFDocument();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="commande-${orderId}.pdf"`);
+    
+    doc.pipe(res);
+    
+    doc.fontSize(20).text('COMMANDE DOCC', 50, 50);
+    doc.fontSize(12);
+    doc.text(`N° Commande: ${order[0].order_number}`, 50, 100);
+    doc.text(`Date: ${new Date(order[0].order_date).toLocaleDateString('fr-FR')}`, 50, 120);
+    doc.text(`Client: ${order[0].company_name}`, 50, 140);
+    doc.text(`Contact: ${order[0].contact_person}`, 50, 160);
+    doc.text(`Statut: ${order[0].status}`, 50, 180);
+    
+    doc.text('ARTICLES:', 50, 220);
+    let yPos = 240;
+    items.forEach(item => {
+      doc.text(`${item.code} - ${item.name}: ${item.quantity} x ${item.unit_price} DA = ${item.total_price} DA`, 50, yPos);
+      yPos += 20;
+    });
+    
+    doc.text(`TOTAL: ${order[0].total_amount} DA`, 50, yPos + 20);
+    doc.text(`Notes: ${order[0].notes || 'Aucune note'}`, 50, yPos + 60);
+    doc.text(`Généré le ${new Date().toLocaleString('fr-FR')}`, 50, yPos + 100);
+    
+    doc.end();
+    
+  } catch (error) {
+    console.error('Erreur PDF commande:', error);
+    res.status(500).json({ success: false, message: 'Erreur génération PDF' });
+  }
+});
+
 // GET /api/orders/:id - Récupérer une commande spécifique
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
