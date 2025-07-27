@@ -30,10 +30,11 @@ app.use(compression());
 // Limitation du taux de requêtes
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limite à 100 requêtes par fenêtre par IP
+  max: 1000, // limite à 1000 requêtes par fenêtre par IP
   message: 'Trop de requêtes depuis cette IP, réessayez plus tard.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1'
 });
 app.use('/api/', limiter);
 

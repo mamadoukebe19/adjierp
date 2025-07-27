@@ -197,6 +197,7 @@ const ReportForm: React.FC = () => {
         .filter(([_, quantity]) => quantity > 0)
         .map(([position, quantity]) => ({ position, quantity }));
 
+      // First create the report
       const response = await fetch('/api/reports/complete', {
         method: 'POST',
         headers: {
@@ -216,9 +217,34 @@ const ReportForm: React.FC = () => {
       });
       
       if (response.ok) {
+        const reportData = await response.json();
+        
+        // Submit the report to update stocks
+        const submitResponse = await fetch(`/api/reports/${reportData.data.reportId}/submit`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        });
+        
+        if (submitResponse.ok) {
+          const event = new CustomEvent('showNotification', {
+            detail: { message: 'Rapport ajouté avec succès et stocks mis à jour', type: 'success' }
+          });
+          window.dispatchEvent(event);
+        } else {
+          const event = new CustomEvent('showNotification', {
+            detail: { message: 'Rapport créé mais erreur de mise à jour des stocks', type: 'warning' }
+          });
+          window.dispatchEvent(event);
+        }
+        
         navigate('/reports');
       } else {
-        console.error('Erreur lors de la création du rapport');
+        const event = new CustomEvent('showNotification', {
+          detail: { message: 'Erreur lors de la création du rapport', type: 'error' }
+        });
+        window.dispatchEvent(event);
       }
     } catch (error) {
       console.error('Erreur:', error);

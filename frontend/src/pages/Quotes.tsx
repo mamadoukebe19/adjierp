@@ -86,6 +86,10 @@ const Quotes: React.FC = () => {
       });
       
       if (response.ok) {
+        const event = new CustomEvent('showNotification', {
+          detail: { message: 'Devis créé avec succès', type: 'success' }
+        });
+        window.dispatchEvent(event);
         setShowCreateDialog(false);
         setSelectedClient('');
         setQuoteData({ validityDays: 30, totalAmount: 0, notes: '' });

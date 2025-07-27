@@ -63,13 +63,18 @@ pool.on('error', (err) => {
 });
 
 // Ping périodique pour maintenir les connexions
-setInterval(() => {
+let pingInterval = setInterval(() => {
   pool.query('SELECT 1', (err) => {
     if (err) {
       console.error('❌ Ping MySQL échoué:', err.message);
+      // Restart ping interval on error
+      clearInterval(pingInterval);
+      setTimeout(() => {
+        pingInterval = setInterval(arguments.callee, 300000);
+      }, 5000);
     }
   });
-}, 300000); // Toutes les 5 minutes
+}, 60000); // Toutes les minutes
 
 // Attendre que MySQL soit prêt
 const waitForDatabase = async () => {
@@ -107,14 +112,25 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Fonctions utilitaires pour les requêtes
 const executeQuery = async (query, params = []) => {
-  try {
-    const [rows] = await promisePool.execute(query, params);
-    return rows;
-  } catch (error) {
-    console.error('Erreur lors de l\'exécution de la requête:', error.message);
-    console.error('Requête:', query);
-    console.error('Paramètres:', params);
-    throw error;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      const [rows] = await promisePool.execute(query, params);
+      return rows;
+    } catch (error) {
+      console.error('Erreur lors de l\'exécution de la requête:', error.message);
+      if (error.code === 'PROTOCOL_CONNECTION_LOST' || error.code === 'ECONNRESET') {
+        retries--;
+        if (retries > 0) {
+          console.log(`Tentative de reconnexion... (${retries} restantes)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+      }
+      console.error('Requête:', query);
+      console.error('Paramètres:', params);
+      throw error;
+    }
   }
 };
 

@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { useEffect } from 'react';
 
 // Pages
 import Login from './pages/Login';
@@ -26,6 +27,22 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 const AppContent = () => {
   const { isDarkMode } = useTheme();
+  
+  useEffect(() => {
+    const handleNotification = (event: any) => {
+      const { message, type } = event.detail;
+      if (type === 'success') {
+        toast.success(message);
+      } else if (type === 'error') {
+        toast.error(message);
+      } else {
+        toast(message);
+      }
+    };
+    
+    window.addEventListener('showNotification', handleNotification);
+    return () => window.removeEventListener('showNotification', handleNotification);
+  }, []);
   
   const theme = createTheme({
     palette: {

@@ -95,6 +95,10 @@ const Invoices: React.FC = () => {
       });
       
       if (response.ok) {
+        const event = new CustomEvent('showNotification', {
+          detail: { message: 'Facture créée avec succès', type: 'success' }
+        });
+        window.dispatchEvent(event);
         setShowCreateDialog(false);
         setSelectedOrder('');
         setInvoiceData({ dueDays: 30, notes: '' });
