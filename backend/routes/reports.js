@@ -441,13 +441,99 @@ router.post('/complete', authenticateToken, async (req, res) => {
       await executeTransaction(queries);
     }
 
+    // Mise à jour automatique des stocks
+    const stockUpdateQueries = [];
+
+    // Mise à jour du statut du rapport
+    stockUpdateQueries.push({
+      query: 'UPDATE daily_reports SET status = "submitted", updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      params: [reportId]
+    });
+
+    // Mise à jour des stocks PBA (addition)
+    for (const production of pbaProduction) {
+      if (production.quantity > 0) {
+        stockUpdateQueries.push({
+          query: `
+            INSERT INTO pba_stock (pba_product_id, total_produced, last_updated) 
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE 
+            total_produced = total_produced + VALUES(total_produced),
+            last_updated = CURRENT_TIMESTAMP
+          `,
+          params: [production.productId, production.quantity]
+        });
+
+        stockUpdateQueries.push({
+          query: `
+            INSERT INTO pba_stock_movements 
+            (pba_product_id, movement_type, quantity, reference_type, reference_id, created_by) 
+            VALUES (?, 'production', ?, 'report', ?, ?)
+          `,
+          params: [production.productId, production.quantity, reportId, req.user.id]
+        });
+      }
+    }
+
+    // Mise à jour des stocks de matériaux (soustraction)
+    for (const material of materialUsage) {
+      if (material.quantity > 0) {
+        stockUpdateQueries.push({
+          query: `
+            UPDATE material_stock 
+            SET current_stock = GREATEST(0, current_stock - ?),
+                last_updated = CURRENT_TIMESTAMP 
+            WHERE material_id = ?
+          `,
+          params: [material.quantity, material.materialId]
+        });
+
+        stockUpdateQueries.push({
+          query: `
+            INSERT INTO material_stock_movements 
+            (material_id, movement_type, quantity, reference_type, reference_id, created_by) 
+            VALUES (?, 'usage', ?, 'report', ?, ?)
+          `,
+          params: [material.materialId, material.quantity, reportId, req.user.id]
+        });
+      }
+    }
+
+    // Mise à jour des stocks d'armatures (addition)
+    for (const armature of armatureProduction) {
+      if (armature.quantity > 0) {
+        stockUpdateQueries.push({
+          query: `
+            UPDATE armature_stock 
+            SET current_stock = current_stock + ?, 
+                total_entries = total_entries + ?,
+                last_updated = CURRENT_TIMESTAMP 
+            WHERE armature_id = ?
+          `,
+          params: [armature.quantity, armature.quantity, armature.armatureId]
+        });
+      }
+    }
+
+    // Exécution des mises à jour de stock
+    if (stockUpdateQueries.length > 0) {
+      try {
+        await executeTransaction(stockUpdateQueries);
+      } catch (stockError) {
+        console.error('Erreur mise à jour stocks:', stockError);
+        // Rollback du rapport si erreur de stock
+        await executeQuery('DELETE FROM daily_reports WHERE id = ?', [reportId]);
+        throw new Error('Erreur lors de la mise à jour des stocks');
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Rapport complet créé avec succès',
+      message: 'Rapport complet créé avec succès, stocks mis à jour',
       data: {
         reportId,
         reportDate,
-        status: 'draft'
+        status: 'submitted'
       }
     });
 
@@ -565,6 +651,35 @@ router.put('/:id/submit', authenticateToken, async (req, res) => {
           VALUES (?, 'production', ?, 'report', ?, ?)
         `,
         params: [production.pba_product_id, production.quantity, reportId, req.user.id]
+      });
+    }
+
+    // Récupération de l'utilisation des matériaux pour mise à jour des stocks
+    const materialUsage = await executeQuery(
+      'SELECT material_id, quantity FROM report_material_usage WHERE report_id = ?',
+      [reportId]
+    );
+
+    // Mise à jour des stocks de matériaux (soustraction)
+    for (const usage of materialUsage) {
+      stockUpdateQueries.push({
+        query: `
+          UPDATE material_stock 
+          SET current_stock = GREATEST(0, current_stock - ?),
+              last_updated = CURRENT_TIMESTAMP 
+          WHERE material_id = ?
+        `,
+        params: [usage.quantity, usage.material_id]
+      });
+
+      // Enregistrement du mouvement de stock matériau
+      stockUpdateQueries.push({
+        query: `
+          INSERT INTO material_stock_movements 
+          (material_id, movement_type, quantity, reference_type, reference_id, created_by) 
+          VALUES (?, 'usage', ?, 'report', ?, ?)
+        `,
+        params: [usage.material_id, usage.quantity, reportId, req.user.id]
       });
     }
 
