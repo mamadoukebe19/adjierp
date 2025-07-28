@@ -113,7 +113,13 @@ router.get('/materials', authenticateToken, async (req, res) => {
         m.code,
         m.name,
         m.category,
-        m.unit_price
+        m.unit_price,
+        1000 as initialStock,
+        COALESCE((
+          SELECT SUM(quantity) 
+          FROM material_stock_movements 
+          WHERE material_id = s.material_id AND movement_type = 'usage'
+        ), 0) as totalUsed
       FROM material_stock s
       JOIN materials m ON s.material_id = m.id
       ORDER BY m.code

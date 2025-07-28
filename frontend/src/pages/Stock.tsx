@@ -288,6 +288,8 @@ const Stock: React.FC = () => {
                     <TableRow>
                       <TableCell>Matériau</TableCell>
                       <TableCell>Unité</TableCell>
+                      <TableCell align="right">Stock Initial</TableCell>
+                      <TableCell align="right">Utilisé (Production)</TableCell>
                       <TableCell align="right">Stock Actuel</TableCell>
                       <TableCell align="right">Seuil d'Alerte</TableCell>
                       <TableCell align="center">Statut</TableCell>
@@ -297,11 +299,11 @@ const Stock: React.FC = () => {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">Chargement...</TableCell>
+                        <TableCell colSpan={8} align="center">Chargement...</TableCell>
                       </TableRow>
                     ) : stockMateriaux.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">Aucun stock matériau trouvé</TableCell>
+                        <TableCell colSpan={8} align="center">Aucun stock matériau trouvé</TableCell>
                       </TableRow>
                     ) : stockMateriaux.map((item: any) => {
                       const status = getStockStatus(item.currentStock || 0, 100);
@@ -311,6 +313,8 @@ const Stock: React.FC = () => {
                             <strong>{item.name}</strong>
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
+                          <TableCell align="right">{item.initialStock || 1000}</TableCell>
+                          <TableCell align="right" style={{ color: 'red' }}>-{item.totalUsed || 0}</TableCell>
                           <TableCell align="right"><strong>{item.currentStock || 0}</strong></TableCell>
                           <TableCell align="right">{100}</TableCell>
                           <TableCell align="center">
